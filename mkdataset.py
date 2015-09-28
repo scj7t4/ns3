@@ -34,7 +34,7 @@ def main():
         "schedule.dat",
         "gm.log",
         "lb.log",
-        "datasets/analysis.ipynb",
+        "analysis.ipynb",
         "mod_labels.dat",
         "migrations.dat",
         "groupsizes.dat",
