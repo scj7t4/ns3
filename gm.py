@@ -116,14 +116,14 @@ class GM(object):
         self.send(self.uuid, message, dest_mod='lb')
 
     def send(self, peer, msg, dest_mod='gm'):
-        dbg = "SEND F: {} T: {} -- {}".format(self.uuid, peer, msg)
+        dbg = "{}s: SEND F: {} T: {} -- {}".format(self.sim_time, self.uuid, peer, msg)
         gm_logging.debug(dbg)
         msg['module'] = dest_mod
         self.connmgr.channel(self.uuid,peer).send(peer, msg)
 
     def check(self):
         self.step = 1
-        gm_logging.debug("DGI({}).check".format(self.uuid))
+        gm_logging.debug("{}s: DGI({}).check".format(self.sim_time, self.uuid))
         if self.splitting:
             return []
         self.sawayc = False
@@ -156,11 +156,15 @@ class GM(object):
 
     def merge(self):
         self.step = 2
-        gm_logging.debug("DGI({}).merge".format(self.uuid))
+        self.coordinators.sort()
+        self.expected.sort()
+        gm_logging.debug("{}s: DGI({}).merge: {}".format(self.sim_time, self.uuid,self.coordinators))
         if self.splitting:
             return []
         if self.maintain:
             return []
+        if self.expected:
+            gm_logging.debug("{}s DGI({}) still expects {}".format(self.sim_time, self.uuid, self.expected))
         self.pending = []
         groupchange = False
         if self.is_leader() and self.pendingldr >= self.uuid:
@@ -192,7 +196,7 @@ class GM(object):
 
     def ready(self):
         self.step = 3
-        gm_logging.debug("DGI({}).ready".format(self.uuid))
+        gm_logging.debug("{}s: DGI({}).ready".format(self.sim_time, self.uuid))
         if self.splitting:
             return []
         if self.maintain:
@@ -220,8 +224,10 @@ class GM(object):
         return []
 
     def cleanup(self):
+        if self.is_leader():
+            self.connmgr.notify_trolls(self.uuid, self.group)
         self.step = 0
-        gm_logging.debug("DGI({}).cleanup".format(self.uuid))
+        gm_logging.debug("{}s: DGI({}).cleanup".format(self.sim_time, self.uuid))
         if self.is_leader() and not self.splitting:
             for p in self.expected:
                 if p in self.group:
@@ -331,10 +337,10 @@ class GM(object):
         dbg = "{}s: ECN@{} of type {}".format(self.sim_time, self.uuid, kind)
         gm_logging.debug(dbg)
         if (settings.ENABLE_SOFT_ECN and kind == "soft") or settings.ENABLE_HARD_ECN:
-            self.maintain = 5
-        if settings.ENABLE_HARD_ECN and kind == "soft" and len(self.group) > 4 and self.is_leader() and not self.splitting:
+            self.maintain = 2
+        if settings.ENABLE_HARD_ECN and kind == "hard" and len(self.group) > 4 and self.is_leader() and not self.splitting:
             gm_logging.debug("ECN@{} Splitting group".format(self.uuid))
-            self.maintain = 5
+            self.maintain = 2
             peers = list(self.group)
             random.shuffle(peers)
 

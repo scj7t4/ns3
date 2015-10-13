@@ -1,4 +1,5 @@
 import sys
+import itertools
 
 class CSMATraceEntry(object):
     def __init__(self, inp):
@@ -43,8 +44,10 @@ class NS3TracePath(object):
 
 def dataset_queue_size(entries):
     queue_tracker = {}
-    data_points = {}
-    drop_events = {}
+    #data_points = {}
+    #drop_events = {}
+    queue_fps = {}
+    drop_fps = {}
     for e in entries:
         loc = e.location.askey()
         t = e.time
@@ -55,8 +58,10 @@ def dataset_queue_size(entries):
 
         if loc not in queue_tracker:
             queue_tracker[loc] = 0
-            data_points[loc] = []
-            drop_events[loc] = []
+            queue_fps[loc] = open("queue-{}.dat".format(loc), "w+")
+            drop_fps[loc] = open("drops-{}.dat".format(loc), "w+")
+            #data_points[loc] = []
+            #drop_events[loc] = []
         
         qc = True
         if e.event_type == "+":
@@ -66,14 +71,19 @@ def dataset_queue_size(entries):
         else:
             qc = False
         if qc:
-            data_points[loc].append((t, queue_tracker[loc]))
+            queue_fps[loc].write("{}\t{}\n".format(t,queue_tracker[loc]))
+            #data_points[loc].append((t, queue_tracker[loc]))
 
         if e.event_type == "d":
-            drop_events[loc].append((t, queue_tracker[loc]))
+            drop_fps[loc].write("{}\t{}\n".format(t,queue_tracker[loc]))
+            #drop_events[loc].append((t, queue_tracker[loc]))
     
+    for loc in queue_fps:
+        queue_fps[loc].close()
+        drop_fps[loc].close()
+    
+    """
     for loc in queue_tracker:
-        if len(queue_tracker) == 0:
-            continue
         safename = loc
         with open("queue-{}.dat".format(safename), "w+") as fp:
             for t,v in data_points[loc]:
@@ -81,11 +91,13 @@ def dataset_queue_size(entries):
         with open("drops-{}.dat".format(safename), "w+") as fp:
             for t,v in drop_events[loc]:
                 fp.write("{}\t{}\n".format(t,v))
+    """
+                
 def do(path):
     with open(path) as fp:
-        contents = list(fp)
-    entries = map(CSMATraceEntry, contents)
-    dataset_queue_size(entries)
+        #contents = list(fp)
+        entries = itertools.imap(CSMATraceEntry, fp)
+        dataset_queue_size(entries)
 
 def main():
     do(sys.argv[1])

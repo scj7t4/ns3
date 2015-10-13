@@ -41,6 +41,10 @@ def main():
         "losses.dat",
         "settings.py",
         "ecns.dat",
+        "../ns-3.23/bridge_bottom_queue.dat",
+        "../ns-3.23/bridge_top_queue.dat",
+        "../ns-3.23/router_top_queue.dat",
+        "../ns-3.23/router_bottom_queue.dat",
     ]
     map(lambda x: collect_file(slot,x), collect)
     generate_queue_data(slot)

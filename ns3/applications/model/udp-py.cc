@@ -145,6 +145,11 @@ UdpPy::StartApplication (void)
   NS_LOG_INFO (Simulator::Now ().GetSeconds () << ": Node"<<GetNode()->GetId()<<" bound "<<
                    InetSocketAddress::ConvertFrom (local).GetIpv4 () << " port " <<
                    InetSocketAddress::ConvertFrom (local).GetPort ());
+  
+  Ipv4Address multi("224.1.1.1");
+  Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (m_socket);
+  udpSocket->MulticastJoinGroup (0, multi);
+  
   if (addressUtils::IsMulticast (m_local))
   {
     Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (m_socket);

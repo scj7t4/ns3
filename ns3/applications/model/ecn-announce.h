@@ -27,6 +27,7 @@
 #include <boost/property_tree/ptree.hpp>
 
 #include <map>
+#include <set>
 
 namespace ns3 {
 
@@ -55,7 +56,7 @@ public:
   EcnAnnounce ();
   virtual ~EcnAnnounce ();
   void CreateSockets(void);
-  void Announcement(Ptr<Packet> p, uint32_t mode);
+  bool Announcement(Ptr<Packet> p, uint32_t mode);
 
 protected:
   virtual void DoDispose (void);
@@ -78,6 +79,10 @@ private:
   Ptr<Socket> m_socket6; //!< IPv6 Socket
   Address m_local; //!< local multicast address
   bool m_started;
+  float m_spam_interval;
+  float m_next_announcement;
+  
+  std::map< std::string, std::string > announce_destinations;
 };
 
 } // namespace ns3

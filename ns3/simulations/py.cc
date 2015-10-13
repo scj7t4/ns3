@@ -23,6 +23,8 @@
 #include "ns3/csma-module.h"
 #include "ns3/ipv4-l3-protocol.h"
 #include "ns3/gnuplot-helper.h"
+#include "ns3/olsr-helper.h"
+#include "ns3/ipv4-nix-vector-helper.h"
 
 #include <fstream>
 
@@ -104,6 +106,17 @@ boost::property_tree::ptree ids_in_container(const NodeContainer& cont)
     return arr;
 }
 
+NetDeviceContainer DevicesAtNodeExcept(Ptr<Node> x, uint32_t skip)
+{
+    NetDeviceContainer result;
+    for(uint32_t i=0; i < x->GetNDevices(); i++)
+    {
+        if(i == skip) continue;
+        result.Add(x->GetDevice(i));
+    }
+    return result;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -114,6 +127,7 @@ main (int argc, char *argv[])
     LogComponentEnable ("EcnAnnounceApplication", LOG_LEVEL_LOGIC);
     //LogComponentEnable("OnOffApplication", LOG_LEVEL_LOGIC);
     //LogComponentEnable ("UdpPyApplication", LOG_LEVEL_LOGIC);
+    //LogComponentEnable ("UdpSocketImpl", LOG_LEVEL_LOGIC);
 
     const int NUM_NODES_N = 15;
     const int NUM_NODES_M = 15;
@@ -128,27 +142,27 @@ main (int argc, char *argv[])
     const bool USE_RED = true;
 
     const float GM_ST = 0.5;
-    const float GM_ET = 60.0;
+    const float GM_ET = 300.0;
     const float TROLL_ST = 0.5;
-    const float TROLL_ET = 60.0;
-    const float TRAFFIC_ST = 2.5;
-    const float TRAFFIC_ET = 50.0;
+    const float TROLL_ET = 300.0;
+    const float TRAFFIC_ST = 80;
+    const float TRAFFIC_ET = 300.0;
 
-    const float RED_MIN_TH = 250;
-    const float RED_MAX_TH = 300;
+    const float RED_MIN_TH = 90;
+    const float RED_MAX_TH = 130;
     const uint32_t RED_QUEUE_LIMIT = 6000;
     const bool RED_GENTLE = true;
     const bool RED_WAIT = true;
-    const float RED_QW = true;
+    const float RED_QW = 0.002;
 
     const std::string JERK1_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
-    const std::string JERK1_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.5]";
-    const std::string JERK1_DATA_RATE = "1.45Mbps";
+    const std::string JERK1_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
+    const std::string JERK1_DATA_RATE = "1.5Mbps";
     const bool JERK1_UDP = true;
 
     const std::string JERK2_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
-    const std::string JERK2_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.5]";
-    const std::string JERK2_DATA_RATE = "1.45Mbps";
+    const std::string JERK2_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
+    const std::string JERK2_DATA_RATE = "1.5Mbps";
     const bool JERK2_UDP = true;
 
     sim_info.put("nodes_n", NUM_NODES_N);
@@ -217,6 +231,12 @@ main (int argc, char *argv[])
     Ptr<Node> jerk1 = CreateObject<Node> ();
     Ptr<Node> jerk2 = CreateObject<Node> ();
     NodeContainer jerks(jerk1, jerk2);
+
+    std::ofstream *tf1 = new std::ofstream("router_top_queue.dat");
+    std::ofstream *tf2 = new std::ofstream("bridge_top_queue.dat");
+    std::ofstream *bf1 = new std::ofstream("router_bottom_queue.dat");
+    std::ofstream *bf2 = new std::ofstream("bridge_bottom_queue.dat");
+
     sim_info.put("n_jerk", jerk1->GetId());
     sim_info.put("m_jerk", jerk2->GetId());
 
@@ -240,19 +260,25 @@ main (int argc, char *argv[])
     NetDeviceContainer link;
     for (uint32_t i = 0; i < topLan.GetN(); i++)
     {
+
         // install a csma channel between the ith toplan node and the bridge node
         link = csma.Install (NodeContainer(topLan.Get (i), bridge1));
         topLanDevices.Add (link.Get(0));
         topBridgeDevices.Add (link.Get(1));
+        Ptr<CsmaNetDevice> rdev = link.Get(0)->GetObject<CsmaNetDevice>();
+        Ptr<CsmaNetDevice> bdev = link.Get(1)->GetObject<CsmaNetDevice>();
         if(i == 0 && USE_RED)
         {
-            // Link is connection between the bridge and the router
-            Ptr<CsmaNetDevice> rdev = link.Get(0)->GetObject<CsmaNetDevice>();
-            Ptr<CsmaNetDevice> bdev = link.Get(1)->GetObject<CsmaNetDevice>();
-            rdev->SetQueue(CreateObject<RedQueueEcn>());
-            bdev->SetQueue(CreateObject<RedQueueEcn>());
+          Ptr<RedQueueEcn> q1 = CreateObject<RedQueueEcn>();
+          Ptr<RedQueueEcn> q2 = CreateObject<RedQueueEcn>();
+          q1->SetQueueLog(tf1);
+          q2->SetQueueLog(tf2);
+          // Link is connection between the bridge and the router
+          rdev->SetQueue(q1);
+          bdev->SetQueue(q2);
         }
     }
+
 
     // Now, Create the bridge netdevice, which will do the packet switching.    The
     // bridge lives on the node bridge1 and bridges together the topBridgeDevices
@@ -279,15 +305,20 @@ main (int argc, char *argv[])
         link = csma.Install (NodeContainer(bottomLan.Get (i), bridge2));
         bottomLanDevices.Add (link.Get(0));
         bottomBridgeDevices.Add (link.Get(1));
+        Ptr<CsmaNetDevice> rdev = link.Get(0)->GetObject<CsmaNetDevice>();
+        Ptr<CsmaNetDevice> bdev = link.Get(1)->GetObject<CsmaNetDevice>();
         if(i == 0)
         {
             // Link is connection between the bridge and the router
-            Ptr<CsmaNetDevice> rdev = link.Get(0)->GetObject<CsmaNetDevice>();
-            Ptr<CsmaNetDevice> bdev = link.Get(1)->GetObject<CsmaNetDevice>();
             if(USE_RED)
             {
-                rdev->SetQueue(CreateObject<RedQueueEcn>());
-                bdev->SetQueue(CreateObject<RedQueueEcn>());
+              Ptr<RedQueueEcn> q1 = CreateObject<RedQueueEcn>();
+              Ptr<RedQueueEcn> q2 = CreateObject<RedQueueEcn>();
+              q1->SetQueueLog(bf1);
+              q2->SetQueueLog(bf2);
+              // Link is connection between the bridge and the router
+              rdev->SetQueue(q1);
+              bdev->SetQueue(q2);
             }
         }
     }
@@ -305,7 +336,8 @@ main (int argc, char *argv[])
     routerNodes.Add(jerk1);
     routerNodes.Add(jerk2);
     InternetStackHelper internet;
-    internet.Install (routerNodes);
+    //Ipv4NixVectorHelper nix;
+    internet.Install(routerNodes);
 
     // We've got the "hardware" in place.    Now we need to add IP addresses.
     NS_LOG_INFO ("Assign IP Addresses.");
@@ -317,12 +349,61 @@ main (int argc, char *argv[])
     ipv4.SetBase ("10.1.3.0", "255.255.255.0");
     ipv4.Assign (t3);
 
+
+    //
     //
     // Create router nodes, initialize routing database and set up the routing
     // tables in the nodes.    We excuse the bridge nodes from having to serve as
     // routers, since they don't even have internet stacks on them.
     //
+    /*
+    std::cout<<"Making routes"<<std::endl;
+    for(uint32_t i=0; i < bridge1->GetNDevices(); i++)
+    {
+        std::cout<<"Start "<<i<<std::endl;
+        NetDeviceContainer bridgeifs = DevicesAtNodeExcept(bridge1,i);
+        std::cout<<"bridgeifs "<<i<<std::endl;
+        Ptr<NetDevice> devi = bridge1->GetDevice(i);
+        std::cout<<"device "<<i<<" x "<<devi->GetIfIndex()<<std::endl;
+        multicast.AddMulticastRoute(bridge1, Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"), devi, bridgeifs);
+        std::cout<<"routed "<<i<<std::endl;
+    }
+    for(uint32_t i=0; i < bridge2->GetNDevices(); i++)
+    {
+        NetDeviceContainer bridgeifs = DevicesAtNodeExcept(bridge2,i);
+        Ptr<NetDevice> devi = bridge2->GetDevice(i);
+        multicast.AddMulticastRoute(bridge2, Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"), devi, bridgeifs);
+    }
+    multicast.AddMulticastRoute(router, Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"),
+        router->GetDevice(0), NetDeviceContainer(router->GetDevice(1)));
+    multicast.AddMulticastRoute(router, Ipv4Address("0.0.0.0"), Ipv4Address("0.0.0.0"),
+        router->GetDevice(1), NetDeviceContainer(router->GetDevice(0)));
+    */
+
+    std::cout<<"Adding defaults"<<std::endl;
+    Ipv4StaticRoutingHelper multicast;
     Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
+
+
+    for(uint32_t i=0; i < nodes_n.GetN(); i++)
+    {
+        multicast.SetDefaultMulticastRoute(nodes_n.Get(i), nodes_n.Get(i)->GetDevice(0));
+        nodes_n.Get(i)->GetObject<Ipv4>()->GetRoutingProtocol()->PrintRoutingTable(Create<OutputStreamWrapper>(&std::cout));
+    }
+    for(uint32_t i=0; i < nodes_m.GetN(); i++)
+    {
+        multicast.SetDefaultMulticastRoute(nodes_m.Get(i), nodes_m.Get(i)->GetDevice(0));
+    }
+    multicast.SetDefaultMulticastRoute(troll1, troll1->GetDevice(0));
+    multicast.SetDefaultMulticastRoute(troll2, troll2->GetDevice(0));
+    multicast.SetDefaultMulticastRoute(troll3, troll3->GetDevice(0));
+    //internet.SetRoutingHelper(multicast);
+
+
+    //Ipv4ListRoutingHelper list;
+    //list.Add(multicast,0);
+    //list.Add(global,-10);
+    //internet.SetRoutingHelper(list);
 
     ApplicationContainer gmApps;
 
@@ -427,6 +508,9 @@ main (int argc, char *argv[])
         if(USE_RED)
             std::cout<<"RED will drop EXTRA TRAFFIC based on MAX_TH"<<std::endl;
     }
+
+
+
     jerkApps.Start(Seconds(TRAFFIC_ST));
     jerkApps.Stop(Seconds(TRAFFIC_ET));
     announcers.Start(Seconds(TROLL_ST));
@@ -434,7 +518,6 @@ main (int argc, char *argv[])
     gmApps.Start(Seconds(GM_ST));
     gmApps.Stop(Seconds(GM_ET));
 
-    Ipv4GlobalRoutingHelper::PopulateRoutingTables ();
 
     //
     // Also configure some tcpdump traces; each interface will be traced.
@@ -474,5 +557,13 @@ main (int argc, char *argv[])
     std::ofstream fp_siminfo("simulationinfo.json", std::ofstream::out | std::ofstream::trunc);
     boost::property_tree::write_json(fp_siminfo, sim_info);
     fp_siminfo.close();
+    tf1->close();
+    tf2->close();
+    bf1->close();
+    bf2->close();
+    delete tf1;
+    delete tf2;
+    delete bf1;
+    delete bf2;
     return 0;
 }

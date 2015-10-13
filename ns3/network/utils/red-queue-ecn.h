@@ -176,8 +176,9 @@ public:
   */
   int64_t AssignStreams (int64_t stream);
 
-  typedef Callback<void, Ptr< Packet >, uint32_t> announce_cb_type;
+  typedef Callback<bool, Ptr< Packet >, uint32_t> announce_cb_type;
   void SetAnnounceCallback(announce_cb_type func);
+  void SetQueueLog(std::ostream* x);
 
 private:
   virtual bool DoEnqueue (Ptr<Packet> p);
@@ -236,6 +237,8 @@ private:
   double ModifyP (double p, uint32_t count, uint32_t countBytes,
                   uint32_t meanPktSize, bool wait, uint32_t size);
 
+
+
   std::list<Ptr<Packet> > m_packets; //!< packets in the queue
 
   uint32_t m_bytesInQueue; //!< bytes in the queue
@@ -283,6 +286,7 @@ private:
   Ptr<UniformRandomVariable> m_uv;  //!< rng stream
 
   announce_cb_type m_announcer;
+  std::ostream* m_log_file;
 };
 
 }; // namespace ns3

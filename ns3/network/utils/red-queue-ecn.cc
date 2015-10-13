@@ -159,7 +159,8 @@ RedQueueEcn::RedQueueEcn () :
   Queue (),
   m_packets (),
   m_bytesInQueue (0),
-  m_hasRedStarted (false)
+  m_hasRedStarted (false),
+  m_log_file(NULL)
 {
   NS_LOG_FUNCTION (this);
   m_uv = CreateObject<UniformRandomVariable> ();
@@ -322,10 +323,9 @@ RedQueueEcn::DoEnqueue (Ptr<Packet> p)
     {
       NS_LOG_DEBUG ("\t Dropping due to Prob Mark " << m_qAvg);
       m_stats.unforcedDrop++;
-      if(!m_announcer.IsNull())
+      bool ad = m_announcer.IsNull() || !m_announcer(p, dropType);
+      if(ad)
       {
-        m_announcer(p, dropType);
-      } else {
         Drop (p);
         return false;
       }
@@ -334,18 +334,15 @@ RedQueueEcn::DoEnqueue (Ptr<Packet> p)
     {
       NS_LOG_DEBUG ("\t Dropping due to Hard Mark " << m_qAvg);
       m_stats.forcedDrop++;
-      if(!m_announcer.IsNull())
-      {
-        m_announcer(p, dropType);
-      }
-      else
+      bool ad = m_announcer.IsNull() || !m_announcer(p, dropType);
+      if(ad)
         Drop (p);
       if (m_isNs1Compat)
         {
           m_count = 0;
           m_countBytes = 0;
         }
-      if(m_announcer.IsNull())
+      if(ad)
         return false;
     }
 
@@ -355,6 +352,11 @@ RedQueueEcn::DoEnqueue (Ptr<Packet> p)
   NS_LOG_LOGIC ("Number packets " << m_packets.size ());
   NS_LOG_LOGIC ("Number bytes " << m_bytesInQueue);
 
+  if(m_log_file)
+  {
+    *m_log_file<<Simulator::Now().GetSeconds()<<"\t"<<GetQueueSize()<<"\t"<<m_qAvg<<std::endl;
+  }
+
   return true;
 }
 
@@ -362,6 +364,12 @@ void
 RedQueueEcn::SetAnnounceCallback(RedQueueEcn::announce_cb_type func)
 {
   m_announcer = func;
+}
+
+void
+RedQueueEcn::SetQueueLog(std::ostream* x)
+{
+  m_log_file = x;
 }
 
 /*
@@ -438,7 +446,7 @@ RedQueueEcn::InitializeParams (void)
     }
 
   /// \todo implement adaptive RED
-
+  /*
   NS_LOG_DEBUG ("\tm_delay " << m_linkDelay.GetSeconds () << "; m_isWait "
                              << m_isWait << "; m_qW " << m_qW << "; m_ptc " << m_ptc
                              << "; m_minTh " << m_minTh << "; m_maxTh " << m_maxTh
@@ -446,9 +454,10 @@ RedQueueEcn::InitializeParams (void)
                              << "; lInterm " << m_lInterm << "; va " << m_vA <<  "; cur_max_p "
                              << m_curMaxP << "; v_b " << m_vB <<  "; m_vC "
                              << m_vC << "; m_vD " <<  m_vD);
+  */
 }
 
-// Compute the average queue size
+//blah
 double
 RedQueueEcn::Estimator (uint32_t nQueued, uint32_t m, double qAvg, double qW)
 {
@@ -665,7 +674,10 @@ RedQueueEcn::DoDequeue (void)
 
       NS_LOG_LOGIC ("Number packets " << m_packets.size ());
       NS_LOG_LOGIC ("Number bytes " << m_bytesInQueue);
-
+      if(m_log_file)
+      {
+        *m_log_file<<Simulator::Now().GetSeconds()<<"\t"<<GetQueueSize()<<"\t"<<m_qAvg<<std::endl;
+      }
       return p;
     }
 }

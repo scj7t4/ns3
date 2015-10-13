@@ -58,6 +58,9 @@ def save_traces():
 PROCS = 30
 nodes = {}
 CM = cm.ConnectionManager()
+CM.add_troll("10.1.1.2", 9)
+CM.add_troll("10.1.2.2", 9)
+CM.add_troll("10.1.3.2", 9)
 DGIs = [ dgi.DGI(x,CM) for x in range(PROCS) ]
 UUIDs = range(PROCS)
 #random.shuffle(UUIDs)
@@ -108,10 +111,10 @@ def rpc_serv():
         node = Ipv4Node(nid, ipv4)
         nodes[node.nid] = node
         # Schedule Check
-        resp[u'commands'] += to_rpcs(DGIs[uuid].schedule(1000, 3, scheduling_sigma=settings.SCHEDULING_SIGMA))
-        resp[u'commands'] += to_rpcs([ScheduleCommand(55000, True, lambda: print_state(nid))])
+        resp[u'commands'] += to_rpcs(DGIs[uuid].schedule(1000, 12, scheduling_sigma=settings.SCHEDULING_SIGMA))
+        resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: print_state(nid))])
         if uuid == 0:
-            resp[u'commands'] += to_rpcs([ScheduleCommand(55000, True, lambda: save_traces())])
+            resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: save_traces())])
         with open("schedule.dat","w+") as fp:
             fp.write(ScheduleCommand.summarize())
         with open("mod_labels.dat","w+") as fp:

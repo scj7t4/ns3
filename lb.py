@@ -99,6 +99,7 @@ class LB(object):
         self.normal = set([])
         self.draftage = {}
         self.lost = 0
+        self.counter = 0
         GlobalLBTrace.migrate(self.uuid, 0.0, self.power_q, self.grid_q)
 
     def __repr__(self):
@@ -153,6 +154,7 @@ class LB(object):
         self.connmgr.channel(self.uuid,peer).send(peer, msg)
 
     def load_manage(self):
+        self.counter += 1
         if self.state == self.DEMAND:
             for peer in self.group:
                 if self.uuid == peer:
@@ -162,7 +164,7 @@ class LB(object):
             for peer in self.demand:
                 if self.uuid == peer:
                     continue
-                self.send(peer, {'msg': 'DraftRequest'})
+                self.send(peer, {'msg': 'DraftRequest', 'counter': self.counter})
                 self.draftage = {}
         return []
 
@@ -176,7 +178,7 @@ class LB(object):
         try:
             peer, age = min(groupdrafts, key=lambda x: x[1])
             if age <= -STEP_SIZE:
-                self.send(peer, {'msg': 'DraftSelect', 'step': STEP_SIZE})
+                self.send(peer, {'msg': 'DraftSelect', 'step': STEP_SIZE, 'counter': self.counter})
                 self.migrate(-STEP_SIZE)
                 self.lost_migration()
         except ValueError:
@@ -212,25 +214,28 @@ class LB(object):
             if self.state == self.DEMAND:
                 diff = self.grid_q + self.power_q
                 age = self.power_differential
-                self.send(sender, {'msg': 'DraftAge', 'age':age})
+                self.send(sender, {'msg': 'DraftAge', 'age':age, 'counter': message['counter']})
 
         elif message['msg'] == 'DraftAge':
-            self.draftage[sender] = float(message['age'])
+            if self.counter == message['counter']:
+                self.draftage[sender] = float(message['age'])
 
         elif message['msg'] == 'DraftSelect':
             amount = message['step']
             if self.state == self.DEMAND:
                 self.migrate(amount)
-                self.send(sender, {'msg': 'DraftAccept'})
+                self.send(sender, {'msg': 'DraftAccept', 'counter': message['counter']})
             else:
-                self.send(sender, {'msg': 'TooLate'})
+                self.send(sender, {'msg': 'TooLate', 'counter': message['counter']})
 
         elif message['msg'] == 'DraftAccept':
-            self.found_migration()
+            if self.counter == message['counter']:
+                self.found_migration()
 
         elif message['msg'] == 'TooLate':
-            self.migrate(STEP_SIZE)
-            self.found_migration()
+            if self.counter == message['counter']:
+                self.migrate(STEP_SIZE)
+                self.found_migration()
 
         elif message['msg'] == 'Peerlist':
             self.group = list(message['members'])

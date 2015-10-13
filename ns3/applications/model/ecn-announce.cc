@@ -39,6 +39,7 @@
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
 #include <boost/archive/iterators/transform_width.hpp>
+#include <boost/foreach.hpp>
 
 #include <sstream>
 #include <stdexcept>
@@ -70,6 +71,8 @@ EcnAnnounce::EcnAnnounce ()
 {
   NS_LOG_FUNCTION (this);
   m_started = false;
+  m_spam_interval = 0.250;
+  m_next_announcement = 0.0;
 }
 
 EcnAnnounce::~EcnAnnounce()
@@ -103,6 +106,8 @@ EcnAnnounce::StartApplication (void)
   InetSocketAddress local = InetSocketAddress (Ipv4Address::GetAny (), m_port);
   CreateSockets();
   m_socket->Bind (local);
+  //m_socket->SetAttribute("IpMulticastTtl",UintegerValue(2));
+  m_socket->SetAllowBroadcast(true);
   NS_LOG_INFO (Simulator::Now ().GetSeconds () << ": Node"<<GetNode()->GetId()<<" bound "<<
                    InetSocketAddress::ConvertFrom (local).GetIpv4 () << " port " <<
                    InetSocketAddress::ConvertFrom (local).GetPort ());
@@ -136,8 +141,8 @@ EcnAnnounce::StartApplication (void)
     }
   }
 
-  //m_socket->SetRecvCallback (MakeCallback (&EcnAnnounce::HandleRead, this));
-  //m_socket6->SetRecvCallback (MakeCallback (&EcnAnnounce::HandleRead, this));
+  m_socket->SetRecvCallback (MakeCallback (&EcnAnnounce::HandleRead, this));
+  m_socket6->SetRecvCallback (MakeCallback (&EcnAnnounce::HandleRead, this));
 }
 
 void
@@ -157,10 +162,76 @@ EcnAnnounce::StopApplication ()
     }
 }
 
-void EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
+void
+EcnAnnounce::HandleRead (Ptr<Socket> socket)
+{
+  NS_LOG_FUNCTION (this << socket);
+  Ptr<Packet> packet;
+  Address from;
+  while ((packet = socket->RecvFrom (from)))
+  {
+    boost::property_tree::ptree content;
+
+    if (InetSocketAddress::IsMatchingType (from))
+    {
+      NS_LOG_INFO ("" << Simulator::Now ().GetSeconds () <<": Node"<<GetNode()->GetId()<<" received " <<
+                   packet<<" of "<<packet->GetSize () << " bytes from " <<
+                   InetSocketAddress::ConvertFrom (from).GetIpv4 () << " port " <<
+                   InetSocketAddress::ConvertFrom (from).GetPort ());
+                   
+    }
+    else if (Inet6SocketAddress::IsMatchingType (from))
+    {
+      NS_LOG_INFO ("" << Simulator::Now ().GetSeconds () <<": Node"<<GetNode()->GetId()<<" received " << packet->GetSize () << " bytes from " <<
+                   Inet6SocketAddress::ConvertFrom (from).GetIpv6 () << " port " <<
+                   Inet6SocketAddress::ConvertFrom (from).GetPort ());
+
+    }
+
+    boost::property_tree::ptree params;
+    uint8_t* contents = new uint8_t[packet->GetSize()];
+    packet->CopyData(contents, packet->GetSize());
+    std::string packet_contents = std::string((char *)contents, packet->GetSize());
+    std::cout<<packet_contents<<std::endl;
+    delete [] contents;
+    std::stringstream pstream(packet_contents);
+    
+    boost::property_tree::read_json(pstream, content);
+    std::set<std::string> minions;
+   
+    try
+    {
+      std::string overlord = content.get<std::string>("leader");
+      
+      announce_destinations[overlord] = overlord;
+      BOOST_FOREACH( boost::property_tree::ptree::value_type& peer, content.get_child("group"))
+      {
+          std::string minion = peer.second.get_value<std::string>();
+          announce_destinations[minion] = overlord;
+          NS_LOG_LOGIC("Added "<<minion<<" as member of "<<overlord);
+          minions.insert(minion);
+      }
+      std::vector<std::string> clean;
+      for(std::map<std::string, std::string>::iterator it=announce_destinations.begin(); it != announce_destinations.end(); it++)
+      {
+        if(it->second == overlord && minions.find(it->first) == minions.end() && it->second != it->first)
+          clean.push_back(it->first);
+      }
+      for(std::vector<std::string>::iterator it=clean.begin(); it != clean.end(); it++)
+      {
+        announce_destinations.erase(*it);
+        NS_LOG_LOGIC("Removed "<<*it<<" as member of "<<overlord);
+      }
+    }
+    catch(...) { }
+   
+  }
+}
+
+bool EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
 {
   NS_LOG_FUNCTION (this);
-  if(!m_started) return;
+  if(!m_started) return false;
   Ptr<Packet> dupe = p->Copy();
   EthernetHeader ehdr;
   Ipv4Header hdr;
@@ -171,17 +242,33 @@ void EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
   pt.put("msg","ecn");
   pt.put("mode",mode==1?"hard":mode==2?"soft":"none");
   pt.put("origin",GetNode()->GetId());
+  std::stringstream source_ip;
+  source_ip<<source;
   std::stringstream json_buf;
   std::string json;
   boost::property_tree::write_json(json_buf, pt);
   json = json_buf.str();
 
   /// TODO: Support ipv6
-  Address to = InetSocketAddress(source,9);
   Ptr<Packet> packet = new Packet((uint8_t *) json.c_str(), json.size());
   uint32_t flags = 0;
+  int result = 0;
 
-  int result = m_socket->SendTo(packet, flags, to);
+  if(announce_destinations.find(source_ip.str()) == announce_destinations.end())
+  {
+    NS_LOG_LOGIC("Dropping message from "<<source_ip.str()<<" not participating");
+    return false;
+  }
+  if(m_next_announcement <= Simulator::Now().GetSeconds())
+  {
+    m_next_announcement = Simulator::Now().GetSeconds() + m_spam_interval;
+  }
+  else
+  {
+    return true;
+  }
+  Address to = InetSocketAddress("224.1.1.1", 9);
+  result = m_socket->SendTo(packet, flags, to);  
   if(result == -1)
   {
     std::cout<<"ECN ANNOUNCE FAILS"<<std::endl;
@@ -200,6 +287,7 @@ void EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
                  Inet6SocketAddress::ConvertFrom (to).GetIpv6 () << " port " <<
                  Inet6SocketAddress::ConvertFrom (to).GetPort ());
   }
+  return true;
 }
 
 } // Namespace ns3
