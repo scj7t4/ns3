@@ -126,7 +126,7 @@ class GM(object):
         gm_logging.debug("{}s: DGI({}).check".format(self.sim_time, self.uuid))
         if self.splitting:
             return []
-        self.sawayc = False
+        #self.sawayc = False
         self.expected = []
         self.coordinators = []
         self.groupchange = False
@@ -241,8 +241,8 @@ class GM(object):
         self.splitting = False
         if self.sawayc == False and not self.is_leader():
             self.recover()
-        self.announce_to_lb()
         self.sawayc = False
+        self.announce_to_lb()
         if self.maintain > 0:
             self.maintain -= 1
         return []
@@ -336,7 +336,7 @@ class GM(object):
         GlobalGMTrace.ecnevent(self.uuid, self.sim_time, kind)
         dbg = "{}s: ECN@{} of type {}".format(self.sim_time, self.uuid, kind)
         gm_logging.debug(dbg)
-        if (settings.ENABLE_SOFT_ECN and kind == "soft") or settings.ENABLE_HARD_ECN:
+        if (settings.ENABLE_SOFT_ECN and kind == "soft") or ((settings.ENABLE_SOFT_ECN and not settings.ENABLE_HARD_ECN) and kind == "hard"):
             self.maintain = 2
         if settings.ENABLE_HARD_ECN and kind == "hard" and len(self.group) > 4 and self.is_leader() and not self.splitting:
             gm_logging.debug("ECN@{} Splitting group".format(self.uuid))

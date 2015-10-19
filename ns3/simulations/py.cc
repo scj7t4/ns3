@@ -117,6 +117,29 @@ NetDeviceContainer DevicesAtNodeExcept(Ptr<Node> x, uint32_t skip)
     return result;
 }
 
+NodeContainer ShuffleContainer(NodeContainer inp)
+{
+    Ptr<UniformRandomVariable> rnd = CreateObject<UniformRandomVariable>();
+    Ptr<Node> * nodes = new Ptr<Node>[inp.GetN()];
+    for(uint32_t i=0; i < inp.GetN(); i++)
+    {
+        nodes[i] = inp.Get(i);
+    }
+    for(uint32_t i=inp.GetN()-1; i > 0; i--)
+    {
+        uint32_t j = rnd->GetInteger() % (i+1);
+        Ptr<Node> tmp = nodes[i];
+        nodes[i] = nodes[j];
+        nodes[j] = tmp;
+    }
+    NodeContainer output;
+    for(uint32_t i=0; i < inp.GetN(); i++)
+    {
+        output.Add(nodes[i]);
+    }
+    return output;
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -149,20 +172,20 @@ main (int argc, char *argv[])
     const float TRAFFIC_ET = 300.0;
 
     const float RED_MIN_TH = 90;
-    const float RED_MAX_TH = 130;
-    const uint32_t RED_QUEUE_LIMIT = 6000;
+    const float RED_MAX_TH = 200;
+    const uint32_t RED_QUEUE_LIMIT = 500;
     const bool RED_GENTLE = true;
     const bool RED_WAIT = true;
     const float RED_QW = 0.002;
 
     const std::string JERK1_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERK1_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERK1_DATA_RATE = "1.5Mbps";
+    const std::string JERK1_DATA_RATE = "2.5Mbps";
     const bool JERK1_UDP = true;
 
     const std::string JERK2_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERK2_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERK2_DATA_RATE = "1.5Mbps";
+    const std::string JERK2_DATA_RATE = "2.5Mbps";
     const bool JERK2_UDP = true;
 
     sim_info.put("nodes_n", NUM_NODES_N);
@@ -205,9 +228,20 @@ main (int argc, char *argv[])
     Config::SetDefault ("ns3::RedQueueEcn::LinkBandwidth", LINK_BANDWIDTH);
     Config::SetDefault ("ns3::RedQueueEcn::LinkDelay", LINK_DELAY);
 
+    NodeContainer allnodes;
+    allnodes.Create(NUM_NODES_N+NUM_NODES_M);
+    allnodes = ShuffleContainer(allnodes);
+
     NodeContainer nodes_n, nodes_m;
-    nodes_n.Create (NUM_NODES_N);
-    nodes_m.Create (NUM_NODES_M);
+    for(uint32_t i=0; i < NUM_NODES_N; i++)
+    {
+        nodes_n.Add(allnodes.Get(i));
+
+    }
+    for(uint32_t i=NUM_NODES_N; i < NUM_NODES_N+NUM_NODES_M; i++)
+    {
+        nodes_m.Add(allnodes.Get(i));
+    }
     sim_info.add_child("n_nodes", ids_in_container(nodes_n));
     sim_info.add_child("m_nodes", ids_in_container(nodes_m));
 
@@ -531,23 +565,24 @@ main (int argc, char *argv[])
     AsciiTraceHelper ascii;
     csma.EnableAsciiAll (ascii.CreateFileStream ("csma.tr"));
 
-    Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacTxDrop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/PhyTxDrop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/PhyRxDrop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/$ns3::UdpL4Protocol/SocketList/*/$ns3::UdpSocketImpl/Drop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Drop",
-        MakeCallback (&Ipv4L3Drop));
-    Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/InterfaceList/*/ArpCache/Drop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/$ns3::ArpL3Protocol/Drop",
-        MakeCallback (&CsmaRx));
-    Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/TxQueue/Drop",
-        MakeCallback (&CsmaRx));
-
+    
+    //Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/MacTxDrop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/PhyTxDrop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/PhyRxDrop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/$ns3::UdpL4Protocol/SocketList/*/$ns3::UdpSocketImpl/Drop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/Drop",
+    //    MakeCallback (&Ipv4L3Drop));
+    //Config::Connect("/NodeList/*/$ns3::Ipv4L3Protocol/InterfaceList/*/ArpCache/Drop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/$ns3::ArpL3Protocol/Drop",
+    //    MakeCallback (&CsmaRx));
+    //Config::Connect("/NodeList/*/DeviceList/*/$ns3::CsmaNetDevice/TxQueue/Drop",
+    //   MakeCallback (&CsmaRx));
+    
     //Config::ConnectWithoutContext("$ns3::PacketSocket/FAKSE", MakeCallback(&PacketDrop));
 
     PopulateArpCache();
