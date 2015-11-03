@@ -112,6 +112,7 @@ class GM(object):
         message = {'msg': 'Peerlist',
                    'members': self.group,
                    'leader': self.leader,
+                   'congestion': self.maintain,
                    }
         self.send(self.uuid, message, dest_mod='lb')
 

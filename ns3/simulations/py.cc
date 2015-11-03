@@ -155,6 +155,9 @@ main (int argc, char *argv[])
     const int NUM_NODES_N = 15;
     const int NUM_NODES_M = 15;
 
+	const int NUM_JERKS_N = 2;
+	const int NUM_JERKS_M = 2;
+
     const std::string ns3LB = "100Mbps";
     StringValue LINK_BANDWIDTH = StringValue(ns3LB);
     const uint64_t ns3LD = 500000;
@@ -172,21 +175,21 @@ main (int argc, char *argv[])
     const float TRAFFIC_ET = 300.0;
 
     const float RED_MIN_TH = 90;
-    const float RED_MAX_TH = 200;
-    const uint32_t RED_QUEUE_LIMIT = 500;
+    const float RED_MAX_TH = 130;
+    const uint32_t RED_QUEUE_LIMIT = 1000;
     const bool RED_GENTLE = true;
     const bool RED_WAIT = true;
     const float RED_QW = 0.002;
 
-    const std::string JERK1_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
-    const std::string JERK1_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERK1_DATA_RATE = "2.5Mbps";
-    const bool JERK1_UDP = true;
+    const std::string JERKN_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
+    const std::string JERKN_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
+    const std::string JERKN_DATA_RATE = "1.25Mbps";
+    const bool JERKN_UDP = true;
 
-    const std::string JERK2_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
-    const std::string JERK2_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERK2_DATA_RATE = "2.5Mbps";
-    const bool JERK2_UDP = true;
+    const std::string JERKM_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
+    const std::string JERKM_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
+    const std::string JERKM_DATA_RATE = "1.25Mbps";
+    const bool JERKM_UDP = true;
 
     sim_info.put("nodes_n", NUM_NODES_N);
     sim_info.put("nodes_m", NUM_NODES_M);
@@ -207,14 +210,14 @@ main (int argc, char *argv[])
     sim_info.put("red_wait", RED_WAIT);
     sim_info.put("red_qw", RED_QW);
     sim_info.put("use_red", USE_RED);
-    sim_info.put("traffic1_on_time", JERK1_ON_TIME);
-    sim_info.put("traffic1_off_time", JERK1_OFF_TIME);
-    sim_info.put("traffic1_data_rate", JERK1_DATA_RATE);
-    sim_info.put("traffic1_udp", JERK1_UDP);
-    sim_info.put("traffic2_on_time", JERK2_ON_TIME);
-    sim_info.put("traffic2_off_time", JERK2_OFF_TIME);
-    sim_info.put("traffic2_data_rate", JERK2_DATA_RATE);
-    sim_info.put("traffic2_udp", JERK2_UDP);
+    sim_info.put("traffic1n_on_time", JERKN_ON_TIME);
+    sim_info.put("trafficn_off_time", JERKN_OFF_TIME);
+    sim_info.put("trafficn_data_rate", JERKN_DATA_RATE);
+    sim_info.put("trafficn_udp", JERKN_UDP);
+    sim_info.put("trafficm_on_time", JERKM_ON_TIME);
+    sim_info.put("trafficm_off_time", JERKM_OFF_TIME);
+    sim_info.put("trafficm_data_rate", JERKM_DATA_RATE);
+    sim_info.put("trafficm_udp", JERKM_UDP);
 
     NS_LOG_INFO ("Set RED params");
     Config::SetDefault ("ns3::RedQueueEcn::Mode", StringValue ("QUEUE_MODE_PACKETS"));
@@ -262,17 +265,22 @@ main (int argc, char *argv[])
     sim_info.put("m_troll", troll2->GetId());
     sim_info.put("router_troll", troll3->GetId());
 
-    Ptr<Node> jerk1 = CreateObject<Node> ();
-    Ptr<Node> jerk2 = CreateObject<Node> ();
-    NodeContainer jerks(jerk1, jerk2);
+	NodeContainer jerks_n;
+	jerks_n.Create(NUM_JERKS_N);
+	NodeContainer jerks_m;
+	jerks_m.Create(NUM_JERKS_M);
+
+    NodeContainer jerks;
+	jerks.Add(jerks_n);
+	jerks.Add(jerks_m);
 
     std::ofstream *tf1 = new std::ofstream("router_top_queue.dat");
     std::ofstream *tf2 = new std::ofstream("bridge_top_queue.dat");
     std::ofstream *bf1 = new std::ofstream("router_bottom_queue.dat");
     std::ofstream *bf2 = new std::ofstream("bridge_bottom_queue.dat");
 
-    sim_info.put("n_jerk", jerk1->GetId());
-    sim_info.put("m_jerk", jerk2->GetId());
+    sim_info.add_child("n_jerk", ids_in_container(jerks_n));
+    sim_info.add_child("m_jerk", ids_in_container(jerks_m));
 
     NS_LOG_INFO ("Build Topology");
     CsmaHelper csma;
@@ -289,7 +297,7 @@ main (int argc, char *argv[])
 
     NodeContainer topLan(router,troll1);
     topLan.Add(nodes_n);
-    topLan.Add(NodeContainer(jerk1));
+    topLan.Add(jerks_n);
 
     NetDeviceContainer link;
     for (uint32_t i = 0; i < topLan.GetN(); i++)
@@ -326,7 +334,7 @@ main (int argc, char *argv[])
     NetDeviceContainer bottomBridgeDevices;
     NodeContainer bottomLan(router,troll2);
     bottomLan.Add(nodes_m);
-    bottomLan.Add(NodeContainer(jerk2));
+    bottomLan.Add(jerks_m);
 
     if(!USE_RED)
     {
@@ -367,8 +375,8 @@ main (int argc, char *argv[])
     routerNodes.Add(troll1);
     routerNodes.Add(troll2);
     routerNodes.Add(troll3);
-    routerNodes.Add(jerk1);
-    routerNodes.Add(jerk2);
+    routerNodes.Add(jerks_n);
+    routerNodes.Add(jerks_m);
     InternetStackHelper internet;
     //Ipv4NixVectorHelper nix;
     internet.Install(routerNodes);
@@ -463,44 +471,49 @@ main (int argc, char *argv[])
 
     if(ENABLE_TRAFFIC)
     {
-        Ptr<OnOffApplication> source1 = CreateObject<OnOffApplication>();
-        Ptr<OnOffApplication> source2 = CreateObject<OnOffApplication>();
-        Ptr<PacketSink> sink1 = CreateObject<PacketSink>();
-        Ptr<PacketSink> sink2 = CreateObject<PacketSink>();
-        jerk1->AddApplication(source1);
-        jerk1->AddApplication(sink1);
-        jerk2->AddApplication(source2);
-        jerk2->AddApplication(sink2);
-        jerkApps.Add(source1);
-        jerkApps.Add(source2);
-        jerkApps.Add(sink1);
-        jerkApps.Add(sink2);
+		for(uint32_t i = 0; i < jerks_n.GetN(); i ++)
+		{
+			Ptr<Node> jerk1 = jerks_n.Get(i);
+			Ptr<Node> jerk2 = jerks_m.Get(i);
+			Ptr<OnOffApplication> source1 = CreateObject<OnOffApplication>();
+			Ptr<OnOffApplication> source2 = CreateObject<OnOffApplication>();
+			Ptr<PacketSink> sink1 = CreateObject<PacketSink>();
+			Ptr<PacketSink> sink2 = CreateObject<PacketSink>();
+			jerk1->AddApplication(source1);
+			jerk1->AddApplication(sink1);
+			jerk2->AddApplication(source2);
+			jerk2->AddApplication(sink2);
+			jerkApps.Add(source1);
+			jerkApps.Add(source2);
+			jerkApps.Add(sink1);
+			jerkApps.Add(sink2);
 
-        InetSocketAddress d1 = InetSocketAddress(
-                    jerk2->GetObject<Ipv4>()->GetAddress(1,0).GetLocal(), 22);
-        InetSocketAddress d2 = InetSocketAddress(
-                    jerk1->GetObject<Ipv4>()->GetAddress(1,0).GetLocal(), 22);
+			InetSocketAddress d1 = InetSocketAddress(
+						jerk2->GetObject<Ipv4>()->GetAddress(1,0).GetLocal(), 22);
+			InetSocketAddress d2 = InetSocketAddress(
+						jerk1->GetObject<Ipv4>()->GetAddress(1,0).GetLocal(), 22);
 
-        std::cout<<d1.GetIpv4()<<":"<<d1.GetPort()<<std::endl;
-        std::cout<<d2.GetIpv4()<<":"<<d2.GetPort()<<std::endl;
+			std::cout<<d1.GetIpv4()<<":"<<d1.GetPort()<<std::endl;
+			std::cout<<d2.GetIpv4()<<":"<<d2.GetPort()<<std::endl;
 
-        source1->SetAttribute("Remote", AddressValue(d1));
-        source2->SetAttribute("Remote", AddressValue(d2));
-        if(!JERK1_UDP)
-            source1->SetAttribute("Protocol", TypeIdValue (TcpSocketFactory::GetTypeId ()));
-        if(!JERK2_UDP)
-            source2->SetAttribute("Protocol", TypeIdValue (TcpSocketFactory::GetTypeId ()));
-        source1->SetAttribute("OnTime",
-            StringValue(JERK1_ON_TIME));
-        source2->SetAttribute("OnTime",
-            StringValue(JERK2_ON_TIME));
-        source1->SetAttribute("OffTime",
-            StringValue(JERK1_OFF_TIME));
-        source2->SetAttribute("OffTime",
-            StringValue(JERK2_OFF_TIME));
-        source1->SetAttribute("DataRate", DataRateValue(DataRate(JERK1_DATA_RATE)));
-        source2->SetAttribute("DataRate", DataRateValue(DataRate(JERK2_DATA_RATE)));
-    }
+			source1->SetAttribute("Remote", AddressValue(d1));
+			source2->SetAttribute("Remote", AddressValue(d2));
+			if(!JERKN_UDP)
+				source1->SetAttribute("Protocol", TypeIdValue (TcpSocketFactory::GetTypeId ()));
+			if(!JERKM_UDP)
+				source2->SetAttribute("Protocol", TypeIdValue (TcpSocketFactory::GetTypeId ()));
+			source1->SetAttribute("OnTime",
+				StringValue(JERKN_ON_TIME));
+			source2->SetAttribute("OnTime",
+				StringValue(JERKM_ON_TIME));
+			source1->SetAttribute("OffTime",
+				StringValue(JERKN_OFF_TIME));
+			source2->SetAttribute("OffTime",
+				StringValue(JERKM_OFF_TIME));
+			source1->SetAttribute("DataRate", DataRateValue(DataRate(JERKN_DATA_RATE)));
+			source2->SetAttribute("DataRate", DataRateValue(DataRate(JERKM_DATA_RATE)));
+    	}
+	}
     else
     {
         std::cout<<"EXTRA TRAFFIC IS DISABLED"<<std::endl;

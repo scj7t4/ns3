@@ -81,6 +81,7 @@ private:
   bool m_started;
   float m_spam_interval;
   float m_next_announcement;
+  bool m_last_announce_was_hard;
   
   std::map< std::string, std::string > announce_destinations;
 };

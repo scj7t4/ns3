@@ -53,6 +53,8 @@ def print_state(nid):
 def save_traces():
     lb.GlobalLBTrace.plot_output()
     gm.GlobalGMTrace.plot_output()
+    with open("schedule.dat","w+") as fp:
+        fp.write(ScheduleCommand.summarize())
     return []
 
 PROCS = 30
@@ -115,8 +117,6 @@ def rpc_serv():
         resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: print_state(nid))])
         if uuid == 0:
             resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: save_traces())])
-        with open("schedule.dat","w+") as fp:
-            fp.write(ScheduleCommand.summarize())
         with open("mod_labels.dat","w+") as fp:
             fp.write("{}\n".format(DGIs[0].sigma))
             ms = DGIs[0].module_schedule()

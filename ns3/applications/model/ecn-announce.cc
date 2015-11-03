@@ -73,6 +73,7 @@ EcnAnnounce::EcnAnnounce ()
   m_started = false;
   m_spam_interval = 0.250;
   m_next_announcement = 0.0;
+  m_last_announce_was_hard = false;
 }
 
 EcnAnnounce::~EcnAnnounce()
@@ -230,7 +231,7 @@ EcnAnnounce::HandleRead (Ptr<Socket> socket)
 
 bool EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
 {
-  NS_LOG_FUNCTION (this);
+  //NS_LOG_FUNCTION (this);
   if(!m_started) return false;
   Ptr<Packet> dupe = p->Copy();
   EthernetHeader ehdr;
@@ -256,12 +257,14 @@ bool EcnAnnounce::Announcement(Ptr<Packet> p, uint32_t mode)
 
   if(announce_destinations.find(source_ip.str()) == announce_destinations.end())
   {
-    NS_LOG_LOGIC("Dropping message from "<<source_ip.str()<<" not participating");
+    //NS_LOG_LOGIC("Dropping message from "<<source_ip.str()<<" not participating");
     return false;
   }
-  if(m_next_announcement <= Simulator::Now().GetSeconds())
+  if(m_next_announcement <= Simulator::Now().GetSeconds() || (mode == 1 && !m_last_announce_was_hard))
   {
+	NS_LOG_LOGIC("Announcing Mode "<<mode<<" Woo.");
     m_next_announcement = Simulator::Now().GetSeconds() + m_spam_interval;
+  	m_last_announce_was_hard = (mode == 1);
   }
   else
   {

@@ -85,7 +85,7 @@ class LB(object):
 
     SCHEDULING_GAP = 75
     ROUNDS = 10
-    
+
     def __init__(self, uuid, connmgr, power_q=None):
         self.uuid = uuid
         self.connmgr = connmgr
@@ -100,6 +100,7 @@ class LB(object):
         self.draftage = {}
         self.lost = 0
         self.counter = 0
+        self.congested = False
         GlobalLBTrace.migrate(self.uuid, 0.0, self.power_q, self.grid_q)
 
     def __repr__(self):
@@ -152,6 +153,26 @@ class LB(object):
     def send(self,peer, msg, dest_mod='lb'):
         msg['module'] = dest_mod
         self.connmgr.channel(self.uuid,peer).send(peer, msg)
+
+    def phase_start(self):
+        gap = settings.MESSAGE_DELIVERY_GAP
+        rounds = self.ROUNDS
+        if self.congested:
+            dbg = "{}s: CONGESTED@{}, things are looking nasty.".format(self.sim_time,self.uuid)
+            gap = int(gap*settings.CONGESTION_ADJUST)
+            rounds = int(rounds/settings.CONGESTION_ADJUST)
+        else:
+            dbg = "{}s: NORMAL@{}, no congestion right now".format(self.sim_time,self.uuid)
+        lb_logging.debug(dbg)
+        round = 2*gap
+        start = int(self.sim_time*1000)
+        r = []
+        for i in range(rounds):
+            if start != int(self.sim_time*1000):
+                r.append(ScheduleCommand(start+0, True, self.load_manage, self))
+            r.append(ScheduleCommand(start+gap, True, self.draft_standard, self))
+            start += round
+        return self.load_manage() + r
 
     def load_manage(self):
         self.counter += 1
@@ -241,6 +262,7 @@ class LB(object):
             self.group = list(message['members'])
             self.group.append(message['leader'])
             self.group.remove(self.uuid)
+            self.congested = bool(message['congestion'])
             for l in [self.demand, self.supply, self.normal]:
                 r = []
                 for peer in l:
@@ -256,11 +278,15 @@ class LB(object):
         return []
 
     def schedule(self, start, **kwargs):
-        gap = settings.MESSAGE_DELIVERY_GAP
-        round = 2*gap
         r = []
+        r.append(ScheduleCommand(start, True, self.phase_start, self))
+        gap = settings.MESSAGE_DELIVERY_GAP
+        start += 2*gap*self.ROUNDS
+        r.append(start)
+        """
+        round = 2*gap
         r.append(ScheduleCommand(start, True, self.load_manage, self))
         r.append(ScheduleCommand(start+gap, True, self.draft_standard, self))
         start += round
-        r.append(start)
+        """
         return r

@@ -37,12 +37,11 @@ class DGI(object):
         for i in range(rounds):
             fiddle = random.gauss(0, self.sigma)
             for k in self.modules:
-                for j in range(self.modules[k].ROUNDS):
-                    self.mod_schedule[start] = k
-                    tmp = self.modules[k].schedule(start, **kwargs)
-                    start = tmp.pop()
-                    map(lambda x: x.adjust(fiddle), tmp)
-                    r += tmp
+                self.mod_schedule[start] = k
+                tmp = self.modules[k].schedule(start, **kwargs)
+                start = tmp.pop()
+                map(lambda x: x.adjust(fiddle), tmp)
+                r += tmp
         return r
 
     def __repr__(self):
