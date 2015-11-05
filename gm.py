@@ -77,9 +77,11 @@ class GM(object):
         self.recover()
         self.p = p
         self.maintain = 0
-        self.splitting = False
         self.expected = []
         self.step = 0
+        self.fallback = None
+        self.splitting = False
+        self.DEBUG_FALLBACK = False
 
     def recover(self):
         #print "{} RECOVERS".format(self.uuid)
@@ -93,8 +95,9 @@ class GM(object):
         self.maintain = 0
         self.splitting = False
 
+
     def __repr__(self):
-        return "PROC {} - G({}): {} L: {}".format(self.uuid, self.groupid, self.group, self.leader)
+        return "PROC {} - G({}): {} L: {} FB: {} M: {}".format(self.uuid, self.groupid, self.group, self.leader, self.fallback, self.maintain)
 
     def __str__(self):
         return self.__repr__()
@@ -124,8 +127,9 @@ class GM(object):
 
     def check(self):
         self.step = 1
-        gm_logging.debug("{}s: DGI({}).check".format(self.sim_time, self.uuid))
+        gm_logging.debug("{}s: DGI({}).check MNT={}".format(self.sim_time, self.uuid, self.maintain))
         if self.splitting:
+            gm_logging.debug("Check exit@{}: splitting".format(self.uuid))
             return []
         #self.sawayc = False
         self.expected = []
@@ -151,17 +155,17 @@ class GM(object):
                     self.expected.append(peer)
             self.expected.append(self.leader)
             self.send(self.leader, {'msg':"AreYouThere", 'groupid': self.groupid})
-            #print "Member {} expects {}".format(self.uuid, self.expected)
+            gm_logging.debug("Member {} expects {}".format(self.uuid, self.expected))
 
         return []
 
     def merge(self):
+        if self.splitting:
+            return []
         self.step = 2
         self.coordinators.sort()
         self.expected.sort()
         gm_logging.debug("{}s: DGI({}).merge: {}".format(self.sim_time, self.uuid,self.coordinators))
-        if self.splitting:
-            return []
         if self.maintain:
             return []
         if self.expected:
@@ -196,10 +200,10 @@ class GM(object):
         return []
 
     def ready(self):
-        self.step = 3
-        gm_logging.debug("{}s: DGI({}).ready".format(self.sim_time, self.uuid))
         if self.splitting:
             return []
+        self.step = 3
+        gm_logging.debug("{}s: DGI({}).ready".format(self.sim_time, self.uuid))
         if self.maintain:
             return []
         # Always send ready
@@ -213,13 +217,43 @@ class GM(object):
             if self.uuid in self.group:
                 self.group.remove(uuid)
             self.expected = list(self.group)
-            for peer in self.group+[self.uuid]:
+           
+            # The fallback group.
+            t = list(self.group)
+            if len(t) >= 3:
+                random.shuffle(t)
+                hl = len(t)/2+1
+                g1 = t[hl:]
+                g2 = t[:hl]
+                g1.sort()
+                g2.sort()
+                gl2 = g2[0]
+                g2 = g2[1:]
+                g2id = newgid()
+                fallback1 = {
+                    'leader': self.leader,
+                    'group': list(g1),
+                    'groupid': self.groupid,
+                }
+                fallback2 = {
+                    'leader': gl2,
+                    'group': list(g2),
+                    'groupid':  g2id,
+                }
+                self.fallback = fallback1
+            else:
+                fallback1 = None
+                fallback2 = None
+                self.fallback = None
+
+            for peer in self.group:
                 self.send(peer, {
                     'msg': "Ready",
                     'groupid': self.groupid,
                     'members': list(self.group),
                     'leader': self.leader,
                     'split': False,
+                    'fallback': dict(fallback1 if peer in g1 else fallback2),
                 })
             self.new_group(self.leader,self.group,self.groupid)
         return []
@@ -239,13 +273,18 @@ class GM(object):
         self.pending = []
         self.pendingldr = self.uuid
         self.pendingid = 0
-        self.splitting = False
-        if self.sawayc == False and not self.is_leader():
+        if self.sawayc == False and not self.splitting and not self.is_leader():
             self.recover()
         self.sawayc = False
         self.announce_to_lb()
-        if self.maintain > 0:
+        if not self.splitting and self.maintain > 0:
             self.maintain -= 1
+        self.splitting = False
+        dbg = "{}s END OF CLEAN {}".format(self.sim_time, self)
+        gm_logging.debug(dbg)
+        if self.uuid == 0 and self.sim_time > 30 and not self.DEBUG_FALLBACK:
+            self.use_fallback()
+            self.DEBUG_FALLBACK = True
         return []
 
     def is_leader(self):
@@ -292,38 +331,40 @@ class GM(object):
             if (self.pendingldr == sender or self.leader == sender) and sender != self.uuid:
                 self.new_group(message['leader'], message['members'], message['groupid'])
                 self.sawayc = True
+                self.fallback = message['fallback']
                 #assert(not self.is_leader() or self.groupid == self.pendingid)
-                if message['split']:
-                    self.maintain = 1
-                    self.splitting = True
-                else:
-                    self.send(sender, {'msg': "ReadyAck", 'groupid': self.groupid})
+                self.send(sender, {'msg': "ReadyAck", 'groupid': self.groupid})
             else:
                 #ignore, this isn't the best process.
                 pass
 
+        elif message['msg'] == "Fallback":
+            self.use_fallback()
+
         elif message['msg'] == "AYCResponse":
             print "{} r-expects {}".format(self.uuid, self.expected)
-            if self.step != 1 or self.splitting:
+            if self.step != 1:
                 gm_logging.debug("Discard AYC Response @{}: Too late".format(self.uuid))
             else:
-                self.expected.remove(sender)
-                if message['leader'] != self.uuid:
-                    if sender in self.group:
-                        self.group.remove(sender)
-                    self.coordinators.append(sender)
+                if sender in self.expected:
+                    self.expected.remove(sender)
+                    if message['leader'] != self.uuid:
+                        if sender in self.group:
+                            self.group.remove(sender)
+                        self.coordinators.append(sender)
 
         elif message['msg'] == "AYTResponse":
             if self.step != 1:
                 gm_logging.debug("Discard AYT Response @{}: Too late".format(self.uuid))
             else:
-                self.expected.remove(sender)
-                if not message['resp']:
-                    self.recover()
-                    self.coordinators.append(sender)
-                else:
-                    self.groupid = message['groupid']
-                    self.group = list(message['members'])
+                if sender in self.expected:
+                    self.expected.remove(sender)
+                    if not message['resp']:
+                        self.recover()
+                        self.coordinators.append(sender)
+                    else:
+                        self.groupid = message['groupid']
+                        self.group = list(message['members'])
 
         elif message['msg'] == "ReadyAck":
             if sender in self.expected:
@@ -333,46 +374,38 @@ class GM(object):
             raise ValueError("Unhandled message type {}".format(message[0]))
         return []
 
+    def use_fallback(self):
+        dbg = "{}s: Fallback triggered @{} using {}".format(self.sim_time, self.uuid, self.fallback)
+        gm_logging.debug(dbg)
+        if self.fallback:
+            if self.step != 0:
+                self.splitting = True
+            self.maintain = 1
+            if self.leader == self.uuid:
+                for peer in self.group:
+                    self.send(peer, {
+                        'msg': "Fallback"
+                    })
+            elif self.fallback['leader'] == self.uuid:
+                for peer in self.fallback['group']:
+                    self.send(peer, {
+                        'msg': "Fallback"
+                    })
+            self.new_group(self.fallback['leader'],
+                list(self.fallback['group']), self.fallback['groupid'])
+            self.expected = []
+            self.fallback = None
+            self.announce_to_lb()
+
     def ecn(self, kind):
         GlobalGMTrace.ecnevent(self.uuid, self.sim_time, kind)
         dbg = "{}s: ECN@{} of type {}".format(self.sim_time, self.uuid, kind)
         gm_logging.debug(dbg)
         if (settings.ENABLE_SOFT_ECN and kind == "soft") or ((settings.ENABLE_SOFT_ECN and not settings.ENABLE_HARD_ECN) and kind == "hard"):
             self.maintain = 2
-        if settings.ENABLE_HARD_ECN and kind == "hard" and len(self.group) > 4 and self.is_leader() and not self.splitting:
+        if settings.ENABLE_HARD_ECN and kind == "hard":
             gm_logging.debug("ECN@{} Splitting group".format(self.uuid))
-            self.maintain = 2
-            peers = list(self.group)
-            random.shuffle(peers)
-
-            splitsize = len(self.group)/2
-            g2 = peers[splitsize:]
-            g2.sort()
-            gl = min(g2)
-            g2.remove(gl)
-            for peer in g2+[gl]:
-                self.send(peer, {
-                    'msg': 'Ready',
-                    'groupid': newgid(),
-                    'members': g2,
-                    'leader': gl,
-                    'split': True,
-                })
-
-            g1 = peers[:splitsize]
-            g1.sort()
-            self.expected = []
-            self.splitting = True
-            self.group = g1
-            for peer in self.group:
-                self.send(peer, {
-                    'msg': "Ready",
-                    'groupid': self.groupid,
-                    'members': list(self.group),
-                    'leader': self.leader,
-                    'split': True,
-                })
-            #return [ ScheduleCommand(settings.MESSAGE_DELIVERY_GAP, False, self.cleanup) ]
+            self.use_fallback()
         return []
 
     def schedule(self, start, **kwargs):
