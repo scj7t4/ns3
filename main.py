@@ -114,9 +114,9 @@ def rpc_serv():
         nodes[node.nid] = node
         # Schedule Check
         resp[u'commands'] += to_rpcs(DGIs[uuid].schedule(1000, 12, scheduling_sigma=settings.SCHEDULING_SIGMA))
-        resp[u'commands'] += to_rpcs([ScheduleCommand(123000, True, lambda: print_state(nid))])
+        resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: print_state(nid))])
         if uuid == 0:
-            resp[u'commands'] += to_rpcs([ScheduleCommand(123000, True, lambda: save_traces())])
+            resp[u'commands'] += to_rpcs([ScheduleCommand(299000, True, lambda: save_traces())])
         with open("mod_labels.dat","w+") as fp:
             fp.write("{}\n".format(DGIs[0].sigma))
             ms = DGIs[0].module_schedule()

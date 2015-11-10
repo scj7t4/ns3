@@ -81,7 +81,6 @@ class GM(object):
         self.step = 0
         self.fallback = None
         self.splitting = False
-        self.DEBUG_FALLBACK = False
 
     def recover(self):
         #print "{} RECOVERS".format(self.uuid)
@@ -245,15 +244,17 @@ class GM(object):
                 fallback1 = None
                 fallback2 = None
                 self.fallback = None
+                g1 = []
 
             for peer in self.group:
+                fbd = dict(fallback1 if peer in g1 else fallback2) if fallback1 else None
                 self.send(peer, {
                     'msg': "Ready",
                     'groupid': self.groupid,
                     'members': list(self.group),
                     'leader': self.leader,
                     'split': False,
-                    'fallback': dict(fallback1 if peer in g1 else fallback2),
+                    'fallback': fbd,
                 })
             self.new_group(self.leader,self.group,self.groupid)
         return []
@@ -282,9 +283,6 @@ class GM(object):
         self.splitting = False
         dbg = "{}s END OF CLEAN {}".format(self.sim_time, self)
         gm_logging.debug(dbg)
-        if self.uuid == 0 and self.sim_time > 30 and not self.DEBUG_FALLBACK:
-            self.use_fallback()
-            self.DEBUG_FALLBACK = True
         return []
 
     def is_leader(self):

@@ -155,24 +155,24 @@ main (int argc, char *argv[])
     const int NUM_NODES_N = 15;
     const int NUM_NODES_M = 15;
 
-	const int NUM_JERKS_N = 2;
-	const int NUM_JERKS_M = 2;
+	const int NUM_JERKS_N = 4;
+	const int NUM_JERKS_M = 4;
 
     const std::string ns3LB = "100Mbps";
     StringValue LINK_BANDWIDTH = StringValue(ns3LB);
     const uint64_t ns3LD = 500000;
     TimeValue LINK_DELAY = TimeValue(NanoSeconds(ns3LD));
 
-    const bool ENABLE_TRAFFIC = false;
+    const bool ENABLE_TRAFFIC = true;
     const bool ENABLE_TROLLS = true;
     const bool USE_RED = true;
 
     const float GM_ST = 0.5;
-    const float GM_ET = 150.0;
+    const float GM_ET = 300.0;
     const float TROLL_ST = 0.5;
-    const float TROLL_ET = 150.0;
+    const float TROLL_ET = 300.0;
     const float TRAFFIC_ST = 80;
-    const float TRAFFIC_ET = 150.0;
+    const float TRAFFIC_ET = 300.0;
 
     const float RED_MIN_TH = 90;
     const float RED_MAX_TH = 130;
@@ -183,12 +183,12 @@ main (int argc, char *argv[])
 
     const std::string JERKN_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERKN_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERKN_DATA_RATE = "1.75Mbps";
+    const std::string JERKN_DATA_RATE = "0.80Mbps";
     const bool JERKN_UDP = true;
 
     const std::string JERKM_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERKM_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERKM_DATA_RATE = "1.75Mbps";
+    const std::string JERKM_DATA_RATE = "0.80Mbps";
     const bool JERKM_UDP = true;
 
     sim_info.put("nodes_n", NUM_NODES_N);
