@@ -183,12 +183,12 @@ main (int argc, char *argv[])
 
     const std::string JERKN_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERKN_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERKN_DATA_RATE = "0.80Mbps";
+    const std::string JERKN_DATA_RATE = "0.5Mbps";
     const bool JERKN_UDP = true;
 
     const std::string JERKM_ON_TIME = "ns3::ConstantRandomVariable[Constant=5.0]";
     const std::string JERKM_OFF_TIME = "ns3::ConstantRandomVariable[Constant=0.0]";
-    const std::string JERKM_DATA_RATE = "0.80Mbps";
+    const std::string JERKM_DATA_RATE = "0.5Mbps";
     const bool JERKM_UDP = true;
 
     sim_info.put("nodes_n", NUM_NODES_N);
